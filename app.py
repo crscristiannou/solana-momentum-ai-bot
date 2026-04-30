@@ -21,12 +21,11 @@ client = genai.Client(api_key=GEMINI_API_KEY)
 
 bot = Bot(token=TELEGRAM_TOKEN)
 
-# Configurare agresivă pentru early buys + momentum
-MIN_MCAP = 4000
-MAX_MCAP = 1200000
-MIN_VOL_5M = 800
-MIN_VOL_1H = 4000
-MIN_SCORE = 3
+MIN_MCAP = 3000          # foarte agresiv
+MAX_MCAP = 1500000
+MIN_VOL_5M = 500         # redus mult
+MIN_VOL_1H = 3000
+MIN_SCORE = 3            # foarte permisiv la început
 
 # ===========================================
 
