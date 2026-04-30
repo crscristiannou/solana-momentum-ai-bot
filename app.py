@@ -3,7 +3,7 @@ import os
 import time
 import httpx
 import logging
-import google.genai as genai
+from google.genai import Client
 from telegram import Bot
 
 app = Flask(__name__)
