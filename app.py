@@ -1,22 +1,18 @@
 from flask import Flask
 import os
 import time
-import asyncio
 import httpx
 import logging
-from datetime import datetime
-
 import google.generativeai as genai
 from telegram import Bot
 
 app = Flask(__name__)
 
-# Config
+# ================== CONFIG ==================
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# Logging
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
@@ -25,78 +21,84 @@ model = genai.GenerativeModel("gemini-1.5-flash")
 
 bot = Bot(token=TELEGRAM_TOKEN)
 
-# Configurare scanare
-SCAN_INTERVAL = 600  # 10 minute
+# Configurare agresivă pentru early buys + momentum
 MIN_MCAP = 8000
-MAX_MCAP = 500000
-MIN_VOL_5M = 3000
-MIN_SCORE = 6
+MAX_MCAP = 600000
+MIN_VOL_5M = 2500          # mai agresiv
+MIN_VOL_1H = 15000
+MIN_SCORE = 5              # scăzut ca să prindă mai multe early
 
-async def analyze_token(pair):
-    try:
-        prompt = f"""
-        Analizează acest token Solana pentru potențial momentum:
-
-        Nume: {pair.get('baseToken', {}).get('name', 'Unknown')}
-        Simbol: {pair.get('baseToken', {}).get('symbol', 'N/A')}
-        MCAP: ~{pair.get('fdv', 0)/1000:.0f}k
-        Volum 5m: ~{pair.get('volume', {}).get('m5', 0)/1000:.0f}k
-        Volum 1h: ~{pair.get('volume', {}).get('h1', 0)/1000:.0f}k
-
-        Răspunde STRICT cu JSON:
-        {{
-          "potential_score": număr între 1 și 10,
-          "potential_2x": "DA" sau "NU",
-          "reason": "explicație scurtă în română",
-          "scam_risk": "DA" sau "NU"
-        }}
-        """
-        response = model.generate_content(prompt)
-        return eval(response.text.strip())  # simplificat pentru test
-    except:
-        return {"potential_score": 5, "potential_2x": "NU", "reason": "Eroare analiză", "scam_risk": "NU"}
+# ===========================================
 
 @app.route("/")
 def home():
-    return "Momentum Bot is running on Render!"
+    return "CRS Momentum Bot is running on Render!"
 
 @app.route("/scan")
-async def scan():
+def scan():
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
-            r = await client.get("https://api.dexscreener.com/latest/dex/search?q=solana")
+        with httpx.Client(timeout=15) as client:
+            r = client.get("https://api.dexscreener.com/latest/dex/search?q=solana")
             data = r.json()
 
-        pairs = data.get("pairs", [])[:30]
-
+        pairs = data.get("pairs", [])[:40]
         sent = 0
+
         for p in pairs:
-            fdv = p.get("fdv") or p.get("marketCap") or 0
-            vol5m = p.get("volume", {}).get("m5", 0)
+            try:
+                fdv = p.get("fdv") or p.get("marketCap") or 0
+                vol5m = p.get("volume", {}).get("m5", 0)
+                vol1h = p.get("volume", {}).get("h1", 0)
 
-            if not (MIN_MCAP < fdv < MAX_MCAP and vol5m > MIN_VOL_5M):
-                continue
+                if not (MIN_MCAP < fdv < MAX_MCAP):
+                    continue
+                if vol5m < MIN_VOL_5M and vol1h < MIN_VOL_1H:
+                    continue
 
-            ai = await analyze_token(p)
+                # Analiză AI
+                prompt = f"""
+                Analizează rapid acest token Solana pentru early momentum:
 
-            if ai.get("potential_score", 0) >= MIN_SCORE:
-                message = f"""
-🚨 Momentum Signal
+                Nume: {p['baseToken'].get('name', 'Unknown')}
+                Simbol: {p['baseToken'].get('symbol', 'N/A')}
+                MCAP: ~{fdv/1000:.0f}k
+                Volum 5m: ~{vol5m/1000:.0f}k
+                Volum 1h: ~{vol1h/1000:.0f}k
+
+                Răspunde STRICT cu JSON:
+                {{"potential_score": număr 1-10, "potential_2x": "DA" sau "NU", "reason": "scurt în română", "scam_risk": "DA" sau "NU"}}
+                """
+
+                response = model.generate_content(prompt)
+                ai_text = response.text.strip()
+                ai = eval(ai_text) if "{" in ai_text else {"potential_score": 6, "potential_2x": "NU", "reason": "Analiză rapidă", "scam_risk": "NU"}
+
+                if ai.get("potential_score", 0) >= MIN_SCORE:
+                    message = f"""
+🚨 <b>CRS Momentum Signal</b>
 
 {p['baseToken']['name']} ({p['baseToken']['symbol']})
 MCAP: ~{fdv/1000:.0f}k
 Vol 5m: ~{vol5m/1000:.0f}k
-Score: {ai['potential_score']}/10
+Score: {ai['potential_score']}/10 | 2x: {ai['potential_2x']}
 Reason: {ai['reason']}
-                """
+Scam Risk: {ai['scam_risk']}
 
-                await bot.send_message(chat_id=CHAT_ID, text=message.strip())
-                sent += 1
-                await asyncio.sleep(2)
+🔗 https://dexscreener.com/solana/{p.get('pairAddress','')}
+                    """
+
+                    bot.send_message(chat_id=CHAT_ID, text=message.strip(), parse_mode='HTML')
+                    sent += 1
+                    log.info(f"Semnal trimis: {p['baseToken']['symbol']}")
+                    time.sleep(2)
+
+            except Exception as e:
+                log.error(f"Eroare la token: {e}")
+                continue
 
         return f"Scan completat. Trimise {sent} semnale."
     except Exception as e:
-        log.error(f"Eroare scan: {e}")
+        log.error(f"Eroare generală scan: {e}")
         return f"Eroare: {str(e)}"
 
 if __name__ == "__main__":
