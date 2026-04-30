@@ -1,4 +1,4 @@
 flask
 httpx
-google-generativeai
+google-genai
 python-telegram-bot
