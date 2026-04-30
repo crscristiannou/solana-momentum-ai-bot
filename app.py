@@ -22,11 +22,11 @@ model = genai.GenerativeModel("gemini-1.5-flash")
 bot = Bot(token=TELEGRAM_TOKEN)
 
 # Configurare agresivă pentru early buys + momentum
-MIN_MCAP = 8000
-MAX_MCAP = 600000
-MIN_VOL_5M = 2500          # mai agresiv
-MIN_VOL_1H = 15000
-MIN_SCORE = 5              # scăzut ca să prindă mai multe early
+MIN_MCAP = 5000
+MAX_MCAP = 1000000      # crescut mult
+MIN_VOL_5M = 1000       # redus puternic
+MIN_VOL_1H = 5000       # redus
+MIN_SCORE = 4           # redus ca să treacă mai multe
 
 # ===========================================
 
