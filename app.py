@@ -17,16 +17,16 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 bot = Bot(token=TELEGRAM_TOKEN)
 
 # Configurare agresivă pentru early buys + momentum
-MIN_MCAP = 5000
-MAX_MCAP = 1000000      # crescut mult
-MIN_VOL_5M = 1000       # redus puternic
-MIN_VOL_1H = 5000       # redus
-MIN_SCORE = 4           # redus ca să treacă mai multe
+MIN_MCAP = 4000
+MAX_MCAP = 1200000
+MIN_VOL_5M = 800
+MIN_VOL_1H = 4000
+MIN_SCORE = 3
 
 # ===========================================
 
